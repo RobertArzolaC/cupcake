@@ -1,0 +1,80 @@
+version: '3'
+
+volumes:
+  es_data_dev:
+    driver: local
+  postgres_data_dev:
+    driver: local
+  postgres_backup_dev:
+    driver: local
+
+services:
+  postgres:
+    build: ./docker/postgres
+    restart: always
+    env_file: ./docker/environment/dev.env
+    ports:
+      - "5100:5432"
+    hostname: postgres
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - postgres_backup_dev:/backups
+
+  elasticsearch:
+    build:
+      context: .
+      dockerfile: ./docker/elasticsearch/development/Dockerfile
+    hostname: elasticsearch
+    env_file: ./docker/environment/dev.env
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es_data_dev:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+
+  django:
+    build:
+      context: .
+      dockerfile: ./docker/django/development/Dockerfile
+    restart: always
+    env_file: ./docker/environment/dev.env
+    ports:
+      - "8000:8000"
+    hostname: django
+    depends_on:
+      - postgres
+      - elasticsearch
+    volumes:
+      - ./cupcake/backend:/src
+    command: sh start.sh
+
+  react:
+    build:
+      context: .
+      dockerfile: ./docker/react/development/Dockerfile
+    restart: always
+    env_file: ./docker/environment/dev.env
+    ports:
+      - "3000:3000"
+    hostname: react
+    depends_on:
+      - django
+    volumes:
+      - ./cupcake/frontend:/app
+      - /app/node_modules
+    command: sh start.sh
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ./docker/nginx/development/Dockerfile
+    restart: always
+    ports:
+      - "80:80"
+    hostname: nginx
+    depends_on:
+      - react
+    command: nginx -g 'daemon off;'
